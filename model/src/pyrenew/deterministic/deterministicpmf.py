@@ -15,7 +15,7 @@ class DeterministicPMF(RandomVariable):
         self,
         vars: ArrayLike,
         label: str = "a_random_variable",
-        tol: float = 1e-20,
+        tol: float = 1e-10,
     ) -> None:
         """
         Default constructor
