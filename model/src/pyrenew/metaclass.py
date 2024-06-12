@@ -90,10 +90,49 @@ def _assert_sample_and_rtype(
     return None
 
 
+class Clock:
+    """
+    Clock class to be used in the model.
+    """
+
+    def __init__(
+        self,
+        unit: str,
+        reference: int,
+    ) -> None:
+        """
+        Default constructor for Clock.
+
+        Parameters
+        ----------
+        unit : str
+            Unit of the clock.
+        reference : int
+            Reference of the clock.
+
+        Returns
+        -------
+        None
+        """
+        self.unit = unit
+        self.reference = reference
+
+
 class RandomVariable(metaclass=ABCMeta):
     """
     Abstract base class for latent and observed random variables.
+
+    Attributes
+    ----------
+    clock : Clock
+        Clock object to be used in the model.
     """
+
+    clock: Clock = None
+
+    def __init_subclass__(self) -> None:
+        """Instantiate the clock object in the subclass"""
+        self.clock = Clock(unit="identity", reference=0)
 
     def __init__(self, **kwargs):
         """
