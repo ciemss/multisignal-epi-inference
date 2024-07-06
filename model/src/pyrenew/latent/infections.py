@@ -1,13 +1,10 @@
 # -*- coding: utf-8 -*-
-# numpydoc ignore=GL08
-
 from __future__ import annotations
 
 from typing import NamedTuple
 
-import jax.numpy as jnp
+import torch
 import pyrenew.latent.infection_functions as inf
-from jax.typing import ArrayLike
 from pyrenew.metaclass import RandomVariable
 
 
@@ -17,11 +14,11 @@ class InfectionsSample(NamedTuple):
 
     Attributes
     ----------
-    post_seed_infections : ArrayLike | None, optional
+    post_seed_infections : torch.Tensor | None, optional
         The estimated latent infections. Defaults to None.
     """
 
-    post_seed_infections: ArrayLike | None = None
+    post_seed_infections: torch.Tensor | None = None
 
     def __repr__(self):
         return f"InfectionsSample(post_seed_infections={self.post_seed_infections})"
@@ -47,14 +44,14 @@ class Infections(RandomVariable):
     """
 
     @staticmethod
-    def validate() -> None:  # numpydoc ignore=GL08
+    def validate() -> None:
         return None
 
     def sample(
         self,
-        Rt: ArrayLike,
-        I0: ArrayLike,
-        gen_int: ArrayLike,
+        Rt: torch.Tensor,
+        I0: torch.Tensor,
+        gen_int: torch.Tensor,
         **kwargs,
     ) -> InfectionsSample:
         """
@@ -63,13 +60,13 @@ class Infections(RandomVariable):
 
         Parameters
         ----------
-        Rt : ArrayLike
+        Rt : torch.Tensor
             Reproduction number.
-        I0 : ArrayLike
+        I0 : torch.Tensor
             Initial infections vector
             of the same length as the
             generation interval.
-        gen_int : ArrayLike
+        gen_int : torch.Tensor
             Generation interval pmf vector.
         **kwargs : dict, optional
             Additional keyword arguments passed through to internal
@@ -80,16 +77,16 @@ class Infections(RandomVariable):
         InfectionsSample
             Named tuple with "infections".
         """
-        if I0.size < gen_int.size:
+        if I0.size(0) < gen_int.size(0):
             raise ValueError(
                 "Initial infections vector must be at least as long as "
                 "the generation interval. "
-                f"Initial infections vector length: {I0.size}, "
-                f"generation interval length: {gen_int.size}."
+                f"Initial infections vector length: {I0.size(0)}, "
+                f"generation interval length: {gen_int.size(0)}."
             )
 
-        gen_int_rev = jnp.flip(gen_int)
-        recent_I0 = I0[-gen_int_rev.size :]
+        gen_int_rev = torch.flip(gen_int, [0])
+        recent_I0 = I0[-gen_int_rev.size(0):]
 
         post_seed_infections = inf.compute_infections_from_rt(
             I0=recent_I0,
