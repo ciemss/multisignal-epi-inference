@@ -1,10 +1,18 @@
+# -*- coding: utf-8 -*-
+
+"""
+Helper classes for regression problems
+"""
+
+from __future__ import annotations
+
+from abc import ABCMeta, abstractmethod
 import torch
 import pyro
 import pyro.distributions as dist
 from pyro.nn import PyroModule
-import pandas as pd
 
-class AbstractRegressionPrediction(PyroModule, metaclass=ABCMeta):
+class AbstractRegressionPrediction(metaclass=ABCMeta):
     @abstractmethod
     def predict(self):
         """
