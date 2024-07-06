@@ -1,12 +1,12 @@
 # numpydoc ignore=GL08
 
-from __future__ import annotations
+from typing import Union, List, Tuple
+import numpy as np
+import torch
 
-from jax.typing import ArrayLike
-from pyrenew.deterministic.deterministic import DeterministicVariable
+TensorLike = Union[torch.Tensor, np.ndarray, List[float], Tuple[float, ...], float, int]
 
-
-class NullVariable(DeterministicVariable):
+class NullVariable:
     """A null (degenerate) random variable. Sampling returns None."""
 
     def __init__(self) -> None:
@@ -16,10 +16,7 @@ class NullVariable(DeterministicVariable):
         -------
         None
         """
-
         self.validate()
-
-        return None
 
     @staticmethod
     def validate() -> None:
@@ -39,7 +36,7 @@ class NullVariable(DeterministicVariable):
         """Retrieve the value of the Null (None)
 
         Parameters
-        ----------.
+        ----------
         **kwargs : dict, optional
             Ignored.
 
@@ -62,21 +59,7 @@ class NullProcess(NullVariable):
         -------
         None
         """
-
-        self.validate()
-
-        return None
-
-    @staticmethod
-    def validate() -> None:
-        """
-        Not used
-
-        Returns
-        -------
-        None
-        """
-        return None
+        super().__init__()
 
     def sample(
         self,
@@ -111,27 +94,13 @@ class NullObservation(NullVariable):
         -------
         None
         """
-
-        self.validate()
-
-        return None
-
-    @staticmethod
-    def validate() -> None:
-        """
-        Not used
-
-        Returns
-        -------
-        None
-        """
-        return None
+        super().__init__()
 
     def sample(
         self,
-        mu: ArrayLike,
-        obs: ArrayLike | None = None,
-        name: str | None = None,
+        mu: TensorLike,
+        obs: Union[TensorLike, None] = None,
+        name: Union[str, None] = None,
         **kwargs,
     ) -> tuple:
         """
@@ -139,9 +108,9 @@ class NullObservation(NullVariable):
 
         Parameters
         ----------
-        mu : ArrayLike
+        mu : TensorLike
             Unused parameter, represents mean of non-null distributions
-        obs : ArrayLike, optional
+        obs : TensorLike, optional
             Observed data. Defaults to None.
         name : str, optional
             Name of the random variable. Defaults to None.
