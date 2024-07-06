@@ -1,8 +1,10 @@
 import torch
 import pyro
 import pyro.distributions as dist
-from pyro.distributions import constraints
 from pyro.nn import PyroModule, PyroSample
+from typing import NamedTuple
+from pyrenew.convolve import torch_convolve
+
 
 class HospitalAdmissionsSample(NamedTuple):
     infection_hosp_rate: float | None = None
@@ -25,18 +27,47 @@ class HospitalAdmissions(PyroModule):
         self.hosp_report_prob_rv = PyroSample(dist.Delta(hosp_report_prob_rv))
         self.infection_to_admission_interval_rv = infection_to_admission_interval_rv
 
-    def sample(self, latent_infections, **kwargs):
-        infection_hosp_rate = self.infect_hosp_rate_rv.sample()
+    def sample(self, latent_infections: Tensor, **kwargs) -> HospitalAdmissionsSample:
+        """
+        Samples from the observation process
+
+        Parameters
+        ----------
+        latent_infections : Tensor
+            Latent infections.
+        **kwargs : dict, optional
+            Additional keyword arguments passed through to internal `sample()`
+            calls, should there be any.
+
+        Returns
+        -------
+        HospitalAdmissionsSample
+        """
+        infection_hosp_rate, *_ = self.infect_hosp_rate_rv.sample(**kwargs)
         infection_hosp_rate_t = infection_hosp_rate * latent_infections
 
-        infection_to_admission_interval = self.infection_to_admission_interval_rv.sample()
+        # Sample the infection to admission interval
+        infection_to_admission_interval, *_ = self.infection_to_admission_interval_rv.sample(**kwargs)
 
-        latent_hospital_admissions = torch.convolve(infection_hosp_rate_t, infection_to_admission_interval, mode='full')[:len(infection_hosp_rate_t)]
+        # Using torch_convolve to compute the convolution
+        latent_hospital_admissions = torch_convolve(
+            infection_hosp_rate_t,
+            infection_to_admission_interval,
+            mode='full'
+        )
 
-        # Apply day of the week and reporting probability effects
-        latent_hospital_admissions *= self.day_of_week_effect_rv.sample()
-        latent_hospital_admissions *= self.hosp_report_prob_rv.sample()
+        # Slice the result to match the size of the original infections tensor
+        latent_hospital_admissions = latent_hospital_admissions[:len(infection_hosp_rate_t)]
 
+        # Applying the day of the week effect
+        day_of_week_effect = self.day_of_week_effect_rv.sample(**kwargs)
+        latent_hospital_admissions *= day_of_week_effect
+
+        # Applying probability of hospitalization effect
+        hosp_report_prob = self.hosp_report_prob_rv.sample(**kwargs)
+        latent_hospital_admissions *= hosp_report_prob
+
+        # Registering the computed hospital admissions as a deterministic variable
         pyro.deterministic(self.latent_hospital_admissions_varname, latent_hospital_admissions)
 
         return HospitalAdmissionsSample(infection_hosp_rate, latent_hospital_admissions)
