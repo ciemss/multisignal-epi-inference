@@ -10,13 +10,14 @@ such as discrete time-to-event distributions
 """
 from __future__ import annotations
 
-import jax.numpy as jnp
-from jax.typing import ArrayLike
+import torch
+import torch.nn.functional as F
+from torch import Tensor
 
 
 def validate_discrete_dist_vector(
-    discrete_dist: ArrayLike, tol: float = 1e-5
-) -> ArrayLike:
+    discrete_dist: Tensor, tol: float = 1e-5
+) -> Tensor:
     """
     Validate that a vector represents a discrete
     probability distribution to within a specified
@@ -24,8 +25,8 @@ def validate_discrete_dist_vector(
 
     Parameters
     ----------
-    discrete_dist : ArrayLike
-        An jax array containing non-negative values that
+    discrete_dist : Tensor
+        A PyTorch tensor containing non-negative values that
         represent a discrete probability distribution. The values
         must sum to 1 within the specified tolerance.
     tol : float, optional
@@ -34,8 +35,8 @@ def validate_discrete_dist_vector(
 
     Returns
     -------
-    ArrayLike
-        The normalized distribution array if the input is valid.
+    Tensor
+        The normalized distribution tensor if the input is valid.
 
     Raises
     ------
@@ -44,7 +45,7 @@ def validate_discrete_dist_vector(
         distribution does not equal 1 within the specified tolerance.
     """
     discrete_dist = discrete_dist.flatten()
-    if not jnp.all(discrete_dist >= 0):
+    if not torch.all(discrete_dist >= 0):
         raise ValueError(
             "Discrete distribution "
             "vector must have "
@@ -52,8 +53,8 @@ def validate_discrete_dist_vector(
             "entries; got {}"
             "".format(discrete_dist)
         )
-    dist_norm = jnp.sum(discrete_dist)
-    if not jnp.abs(dist_norm - 1) < tol:
+    dist_norm = torch.sum(discrete_dist)
+    if not torch.abs(dist_norm - 1) < tol:
         raise ValueError(
             "Discrete generation interval "
             "distributions must sum to 1 "
@@ -63,7 +64,7 @@ def validate_discrete_dist_vector(
     return discrete_dist / dist_norm
 
 
-def reverse_discrete_dist_vector(dist: ArrayLike) -> ArrayLike:
+def reverse_discrete_dist_vector(dist: Tensor) -> Tensor:
     """
     Reverse a discrete distribution
     vector (useful for discrete
@@ -71,12 +72,12 @@ def reverse_discrete_dist_vector(dist: ArrayLike) -> ArrayLike:
 
     Parameters
     ----------
-    dist : ArrayLike
+    dist : Tensor
         A discrete distribution vector (likely discrete time-to-event distribution)
 
     Returns
     -------
-    ArrayLike
-        A reversed (jnp.flip) discrete distribution vector
+    Tensor
+        A reversed (torch.flip) discrete distribution vector
     """
-    return jnp.flip(dist)
+    return torch.flip(dist, dims=[0])
