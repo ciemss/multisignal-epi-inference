@@ -61,5 +61,4 @@ class NegativeBinomialObservation(RandomVariable):
         concentration_prior : dist.Distribution or Number
             The prior distribution for the concentration parameter of the negative binomial distribution.
         """
-        assert isinstance(concentration_prior, (dist.Distribution, torch.Tensor, float, int)), \
-            "concentration_prior must be either a Pyro distribution or a numeric value."
+        assert isinstance(concentration_prior, (dist.Distribution, torch.Tensor, float, int)), "concentration_prior must be either a Pyro distribution or a numeric value." 
