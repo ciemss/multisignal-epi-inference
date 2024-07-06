@@ -7,15 +7,14 @@ pyrenew helper classes
 from abc import ABCMeta, abstractmethod
 from typing import NamedTuple, get_type_hints
 
-import jax
-import jax.numpy as jnp
-import jax.random as jr
+import torch
+import pyro
+import pyro.distributions as dist
 import matplotlib.pyplot as plt
 import numpy as np
-import numpyro as npro
 import polars as pl
-from jax.typing import ArrayLike
-from numpyro.infer import MCMC, NUTS, Predictive
+from torch import Tensor
+from pyro.infer import MCMC, NUTS, Predictive
 from pyrenew.mcmcutils import plot_posterior, spread_draws
 
 
@@ -49,7 +48,7 @@ def _assert_sample_and_rtype(
 
     # Addressing the None case
     if (rp is None) and (not skip_if_none):
-        Exception(
+        raise Exception(
             "The passed object cannot be None. It should be RandomVariable"
         )
     elif skip_if_none and (rp is None):
@@ -209,11 +208,11 @@ class DistributionalRVSample(NamedTuple):
 
     Attributes
     ----------
-    value : ArrayLike
+    value : Tensor
         Sampled value from the distribution.
     """
 
-    value: ArrayLike | None = None
+    value: Tensor | None = None
 
     def __repr__(self) -> str:
         """
@@ -224,12 +223,12 @@ class DistributionalRVSample(NamedTuple):
 
 class DistributionalRV(RandomVariable):
     """
-    Wrapper class for random variables that sample from a single `numpyro.distributions.Distribution`.
+    Wrapper class for random variables that sample from a single `pyro.distributions.Distribution`.
     """
 
     def __init__(
         self,
-        dist: npro.distributions.Distribution,
+        dist: dist.Distribution,
         name: str,
     ):
         """
@@ -237,7 +236,7 @@ class DistributionalRV(RandomVariable):
 
         Parameters
         ----------
-        dist : npro.distributions.Distribution
+        dist : dist.Distribution
             Distribution of the random variable.
         name : str
             Name of the random variable.
@@ -259,17 +258,17 @@ class DistributionalRV(RandomVariable):
         """
         Validation of the distribution to be implemented in subclasses.
         """
-        if not isinstance(dist, npro.distributions.Distribution):
+        if not isinstance(dist, dist.Distribution):
             raise ValueError(
                 "dist should be an instance of "
-                f"numpyro.distributions.Distribution, got {dist}"
+                f"pyro.distributions.Distribution, got {dist}"
             )
 
         return None
 
     def sample(
         self,
-        obs: ArrayLike | None = None,
+        obs: Tensor | None = None,
         **kwargs,
     ) -> DistributionalRVSample:
         """
@@ -277,8 +276,8 @@ class DistributionalRV(RandomVariable):
 
         Parameters
         ----------
-        obs : ArrayLike, optional
-            Observations passed as the `obs` argument to `numpyro.sample()`. Default `None`.
+        obs : Tensor, optional
+            Observations passed as the `obs` argument to `pyro.sample()`. Default `None`.
         **kwargs : dict, optional
             Additional keyword arguments passed through to internal sample calls,
             should there be any.
@@ -288,8 +287,8 @@ class DistributionalRV(RandomVariable):
         DistributionalRVSample
         """
         return DistributionalRVSample(
-            value=jnp.atleast_1d(
-                npro.sample(
+            value=torch.tensor(
+                pyro.sample(
                     name=self.name,
                     fn=self.dist,
                     obs=obs,
@@ -366,7 +365,9 @@ class Model(metaclass=ABCMeta):
             mcmc_args = dict()
 
         self.kernel = NUTS(
-            model=self.sample,
+            model
+
+=self.sample,
             **nuts_args,
         )
 
@@ -383,7 +384,7 @@ class Model(metaclass=ABCMeta):
         self,
         num_warmup,
         num_samples,
-        rng_key: ArrayLike | None = None,
+        rng_key: Tensor | None = None,
         nuts_args: dict = None,
         mcmc_args: dict = None,
         **kwargs,
@@ -411,10 +412,9 @@ class Model(metaclass=ABCMeta):
                 mcmc_args=mcmc_args,
             )
         if rng_key is None:
-            rand_int = np.random.randint(
-                np.iinfo(np.int64).min, np.iinfo(np.int64).max
+            rng_key = torch.randint(
+                low=0, high=2**32 - 1, size=(1,)
             )
-            rng_key = jr.key(rand_int)
 
         self.mcmc.run(rng_key=rng_key, **kwargs)
 
@@ -440,7 +440,7 @@ class Model(metaclass=ABCMeta):
         -------
         None
         """
-        return self.mcmc.print_summary(prob, exclude_deterministic)
+        return self.mcmc.summary(prob, exclude_deterministic)
 
     def spread_draws(self, variables_names: list) -> pl.DataFrame:
         """
@@ -461,7 +461,7 @@ class Model(metaclass=ABCMeta):
     def plot_posterior(
         self,
         var: list,
-        obs_signal: jax.typing.ArrayLike = None,
+        obs_signal: Tensor = None,
         xlab: str = None,
         ylab: str = "Signal",
         samples: int = 50,
@@ -484,21 +484,21 @@ class Model(metaclass=ABCMeta):
 
     def posterior_predictive(
         self,
-        rng_key: ArrayLike | None = None,
-        numpyro_predictive_args: dict = {},
+        rng_key: Tensor | None = None,
+        pyro_predictive_args: dict = {},
         **kwargs,
     ) -> dict:
         """
-        A wrapper for numpyro.infer.Predictive to generate posterior predictive samples.
+        A wrapper for pyro.infer.Predictive to generate posterior predictive samples.
 
         Parameters
         ----------
-        rng_key : ArrayLike, optional
+        rng_key : Tensor, optional
             Random key for the Predictive function call. Defaults to None.
-        numpyro_predictive_args : dict, optional
-            Dictionary of arguments to be passed to the numpyro.inference.Predictive constructor.
+        pyro_predictive_args : dict, optional
+            Dictionary of arguments to be passed to the pyro.infer.Predictive constructor.
         **kwargs
-            Additional named arguments passed to the `__call__()` method of numpyro.inference.Predictive
+            Additional named arguments passed to the `__call__()` method of pyro.infer.Predictive
 
         Returns
         -------
@@ -510,36 +510,35 @@ class Model(metaclass=ABCMeta):
             )
 
         if rng_key is None:
-            rand_int = np.random.randint(
-                np.iinfo(np.int64).min, np.iinfo(np.int64).max
+            rng_key = torch.randint(
+                low=0, high=2**32 - 1, size=(1,)
             )
-            rng_key = jr.key(rand_int)
 
         predictive = Predictive(
             model=self.sample,
             posterior_samples=self.mcmc.get_samples(),
-            **numpyro_predictive_args,
+            **pyro_predictive_args,
         )
 
         return predictive(rng_key, **kwargs)
 
     def prior_predictive(
         self,
-        rng_key: ArrayLike | None = None,
-        numpyro_predictive_args: dict = {},
+        rng_key: Tensor | None = None,
+        pyro_predictive_args: dict = {},
         **kwargs,
     ) -> dict:
         """
-        A wrapper for numpyro.infer.Predictive to generate prior predictive samples.
+        A wrapper for pyro.infer.Predictive to generate prior predictive samples.
 
         Parameters
         ----------
-        rng_key : ArrayLike, optional
+        rng_key : Tensor, optional
             Random key for the Predictive function call. Defaults to None.
-        numpyro_predictive_args : dict, optional
-            Dictionary of arguments to be passed to the numpyro.inference.Predictive constructor.
+        pyro_predictive_args : dict, optional
+            Dictionary of arguments to be passed to the pyro.infer.Predictive constructor.
         **kwargs
-            Additional named arguments passed to the `__call__()` method of numpyro.inference.Predictive
+            Additional named arguments passed to the `__call__()` method of pyro.infer.Predictive
 
         Returns
         -------
@@ -547,15 +546,15 @@ class Model(metaclass=ABCMeta):
         """
 
         if rng_key is None:
-            rand_int = np.random.randint(
-                np.iinfo(np.int64).min, np.iinfo(np.int64).max
+            rng_key = torch.randint(
+                low=0, high=2**32 - 1, size=(1,)
             )
-            rng_key = jr.key(rand_int)
 
         predictive = Predictive(
             model=self.sample,
             posterior_samples=None,
-            **numpyro_predictive_args,
+            **pyro_predictive_args,
         )
 
         return predictive(rng_key, **kwargs)
+
