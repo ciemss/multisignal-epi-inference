@@ -3,7 +3,8 @@
 
 from __future__ import annotations
 
-from jax.typing import ArrayLike
+import torch
+from torchtyping import TensorType
 from pyrenew.deterministic.deterministic import DeterministicVariable
 from pyrenew.distutil import validate_discrete_dist_vector
 from pyrenew.metaclass import RandomVariable
@@ -15,7 +16,7 @@ class DeterministicPMF(RandomVariable):
 
     def __init__(
         self,
-        vars: ArrayLike,
+        vars: TensorType,
         name: str,
         tol: float = 1e-5,
     ) -> None:
@@ -51,14 +52,14 @@ class DeterministicPMF(RandomVariable):
         return None
 
     @staticmethod
-    def validate(vars: ArrayLike) -> None:
+    def validate(vars: TensorType) -> None:
         """
         Validates inputted to DeterministicPMF
 
         Parameters
         ----------
-        vars : ArrayLike
-            An ArrayLike object.
+        vars : TensorType
+            A TensorType object.
 
         Returns
         -------
