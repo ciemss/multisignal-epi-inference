@@ -3,9 +3,9 @@
 
 from __future__ import annotations
 
-import jax.numpy as jnp
-import numpyro as npro
-from jax.typing import ArrayLike
+import torch
+import pyro
+from torch import Tensor
 from pyrenew.metaclass import RandomVariable
 
 
@@ -17,15 +17,15 @@ class DeterministicVariable(RandomVariable):
 
     def __init__(
         self,
-        vars: ArrayLike,
+        vars: Tensor,
         name: str,
     ) -> None:
         """Default constructor
 
         Parameters
         ----------
-        vars : ArrayLike
-            A tuple with arraylike objects.
+        vars : Tensor
+            A tensor with arraylike objects.
         name : str, optional
             A name to assign to the process.
 
@@ -35,20 +35,20 @@ class DeterministicVariable(RandomVariable):
         """
 
         self.validate(vars)
-        self.vars = jnp.atleast_1d(vars)
+        self.vars = torch.tensor(vars)
         self.name = name
 
         return None
 
     @staticmethod
-    def validate(vars: ArrayLike) -> None:
+    def validate(vars: Tensor) -> None:
         """
         Validates inputted to DeterministicPMF
 
         Parameters
         ----------
-        vars : ArrayLike
-            An ArrayLike object.
+        vars : Tensor
+            A Tensor object.
 
         Returns
         -------
@@ -57,10 +57,10 @@ class DeterministicVariable(RandomVariable):
         Raises
         ------
         Exception
-            If the inputted vars object is not a ArrayLike.
+            If the inputted vars object is not a Tensor.
         """
-        if not isinstance(vars, ArrayLike):
-            raise Exception("vars is not a ArrayLike")
+        if not isinstance(vars, Tensor):
+            raise Exception("vars is not a Tensor")
 
         return None
 
@@ -86,5 +86,5 @@ class DeterministicVariable(RandomVariable):
             Containing the stored values during construction.
         """
         if record:
-            npro.deterministic(self.name, self.vars)
+            pyro.sample(self.name, pyro.distributions.Delta(self.vars))
         return (self.vars,)

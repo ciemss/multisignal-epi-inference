@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-
 """
 pyrenew helper classes
 """
@@ -557,4 +556,3 @@ class Model(metaclass=ABCMeta):
         )
 
         return predictive(rng_key, **kwargs)
-
