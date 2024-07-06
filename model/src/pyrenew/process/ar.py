@@ -1,101 +1,61 @@
-# -*- coding: utf-8 -*-
-# numpydoc ignore=GL08
+import torch
+import pyro
+import pyro.distributions as dist
 
-from __future__ import annotations
+import torch
+import pyro
+import pyro.distributions as dist
 
-import jax.numpy as jnp
-import numpyro
-import numpyro.distributions as dist
-from jax import lax
-from jax.typing import ArrayLike
-from pyrenew.metaclass import RandomVariable
-
-
-class ARProcess(RandomVariable):
+class ARProcess:
     """
-    Object to represent
-    an AR(p) process in
-    Numpyro
+    Object to represent an AR(p) process in Pyro.
     """
-
-    def __init__(
-        self,
-        mean: float,
-        autoreg: ArrayLike,
-        noise_sd: float,
-    ) -> None:
+    def __init__(self, mean: float, autoreg: torch.Tensor, noise_sd: float):
         """
-        Default constructor
-
-        Parameters
-        ----------
-        mean: float
-            Mean parameter.
-        autoreg : ArrayLike
-            Model parameters. The shape determines the order.
-        noise_sd : float
-            Standard error for the noise component.
-
-        Returns
-        -------
-        None
+        Initialize the ARProcess class with mean, autoregressive coefficients, and noise standard deviation.
         """
         self.mean = mean
         self.autoreg = autoreg
         self.noise_sd = noise_sd
 
-    def sample(
-        self,
-        duration: int,
-        inits: ArrayLike = None,
-        name: str = "arprocess",
-        **kwargs,
-    ) -> tuple:
+    def sample(self, duration: int, inits: torch.Tensor = None, name: str = "arprocess"):
         """
-        Sample from the AR process
+        Sample from the AR process using Pyro
 
         Parameters
         ----------
         duration: int
             Length of the sequence.
-        inits : ArrayLike, optional
+        inits : torch.Tensor, optional
             Initial points, if None, then these are sampled.
             Defaults to None.
         name : str, optional
-            Name of the parameter passed to numpyro.sample.
+            Name of the parameter passed to pyro.sample.
             Defaults to "arprocess".
-        **kwargs : dict, optional
-            Additional keyword arguments passed through to internal sample()
-            calls, should there be any.
 
         Returns
         -------
-        tuple
-            With a single array of shape (duration,).
+        torch.Tensor
+            A tensor of shape (duration,) containing the sampled AR process.
         """
-        order = self.autoreg.shape[0]
+        order = len(self.autoreg)
         if inits is None:
-            inits = numpyro.sample(
-                name + "_sampled_inits",
-                dist.Normal(0, self.noise_sd).expand((order,)),
-            )
+            # Sample initial values if not provided, centered around the mean
+            inits = pyro.sample(name + "_init", dist.Normal(self.mean, self.noise_sd).expand([order]).to_event(1))
 
-        def _ar_scanner(carry, next):  # numpydoc ignore=GL08
-            new_term = (jnp.dot(self.autoreg, carry) + next).flatten()
-            new_carry = jnp.hstack([new_term, carry[: (order - 1)]])
-            return new_carry, new_term
+        # Prepare a tensor to hold the entire AR process
+        ts = torch.zeros(duration)
+        ts[:order] = inits
 
-        noise = numpyro.sample(
-            name + "_noise",
-            dist.Normal(0, self.noise_sd).expand((duration - inits.size,)),
-        )
+        # Use pyro.plate for vectorized noise sampling
+        with pyro.plate(f"{name}_noise_plate", duration - order):
+            noise = pyro.sample(f"{name}_noise", dist.Normal(0, self.noise_sd).expand([duration - order]))
 
-        last, ts = lax.scan(_ar_scanner, inits - self.mean, noise)
-        return (jnp.hstack([inits, self.mean + ts.flatten()]),)
+        # Generate the AR process values
+        for t in range(order, duration):
+            # Calculate the next value using the autoregressive formula
+            current_state = ts[t-order:t]
+            next_value = self.mean + torch.dot(self.autoreg, current_state - self.mean) + noise[t-order]
+            ts[t] = next_value
 
-    @staticmethod
-    def validate():  # numpydoc ignore=RT01
-        """
-        Validates inputted parameters, implementation pending.
-        """
-        return None
+        return ts
