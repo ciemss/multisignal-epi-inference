@@ -1,82 +1,56 @@
-# -*- coding: utf-8 -*-
-# numpydoc ignore=GL08
+import torch
+from pyro.distributions import Normal
+import pyro
+from pyro.infer import Predictive
 
-from __future__ import annotations
-
-import jax.numpy as jnp
-from jax.typing import ArrayLike
-from pyrenew.metaclass import RandomVariable
-from pyrenew.process import ARProcess
-
-
-class FirstDifferenceARProcess(RandomVariable):
+class FirstDifferenceARProcess:
     """
-    Class for a stochastic process
-    with an AR(1) process on the first
-    differences (i.e. the rate of change).
+    Class for a stochastic process with an AR(1) process on the first differences (i.e., the rate of change).
     """
 
-    def __init__(
-        self,
-        autoreg: ArrayLike,
-        noise_sd: float,
-    ) -> None:
+    def __init__(self, autoreg: torch.Tensor, noise_sd: float):
         """
-        Default constructor
+        Initialize the FirstDifferenceARProcess class.
 
-        Parameters
-        ----------
-        autoreg : ArrayLike
-            Process parameters pyrenew.processesARprocess.
+        Parameters:
+        -----------
+        autoreg : torch.Tensor
+            Coefficient for the autoregressive process.
         noise_sd : float
-            Error passed to pyrenew.processes.ARProcess.
-
-        Returns
-        -------
-        None
+            Standard deviation of the noise in the AR process.
         """
-        self.rate_of_change_proc = ARProcess(0, jnp.array([autoreg]), noise_sd)
+        self.autoreg = autoreg
+        self.noise_sd = noise_sd
 
-    def sample(
-        self,
-        duration: int,
-        init_val: ArrayLike = None,
-        init_rate_of_change: ArrayLike = None,
-        name: str = "trend_rw",
-        **kwargs,
-    ) -> tuple:
+    def sample(self, duration: int, init_val: torch.Tensor = None, init_rate_of_change: torch.Tensor = None):
         """
-        Sample from the process
+        Sample from the AR(1) process on the first differences.
 
-        Parameters
-        ----------
+        Parameters:
+        -----------
         duration : int
-            Passed to ARProcess.sample().s
-        init_val : ArrayLike, optional
-            Starting point of the AR process, by default None.
-        init_rate_of_change : ArrayLike, optional
-            Passed to ARProcess.sample, by default None.
-        name : str, optional
-            Passed to ARProcess.sample(), by default "trend_rw"
-        **kwargs : dict, optional
-            Additional keyword arguments passed through to internal sample()
-            calls, should there be any.
+            Number of time steps to sample.
+        init_val : torch.Tensor, optional
+            Initial value of the process.
+        init_rate_of_change : torch.Tensor, optional
+            Initial rate of change of the process.
 
-        Returns
-        -------
-        tuple
-            With a single array of shape (duration,).
+        Returns:
+        --------
+        torch.Tensor
+            Samples from the AR process.
         """
-        rates_of_change, *_ = self.rate_of_change_proc.sample(
-            duration=duration,
-            inits=jnp.atleast_1d(init_rate_of_change),
-            name=name + "_rate_of_change",
-        )
-        return (init_val + jnp.cumsum(rates_of_change.flatten()),)
+        if init_rate_of_change is None:
+            init_rate_of_change = torch.tensor(0.0)
 
-    @staticmethod
-    def validate():
-        """
-        Validates inputted parameters, implementation pending.
-        """
-        return None
+        if init_val is None:
+            init_val = torch.tensor(0.0)
+
+        samples = torch.zeros(duration)
+        samples[0] = init_val + init_rate_of_change
+
+        for t in range(1, duration):
+            rate_of_change = pyro.sample(f"rate_of_change_{t}", Normal(samples[t-1] * self.autoreg, self.noise_sd))
+            samples[t] = samples[t-1] + rate_of_change
+
+        return samples
