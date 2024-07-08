@@ -7,48 +7,63 @@ import numpy as np
 from numpy.testing import assert_array_equal
 import pyrenew.convolve as pc
 import pytest
+import torch
+from torch.testing import assert_allclose
 
-# def test_double_scanner_reduces_to_single():
-#     """
-#     Test for PyTorch that checks the equivalence of single and double scanners.
-#     """
-#     inits = torch.tensor([0.352, 5.2, -3], dtype=torch.float32)
-#     to_scan_a = torch.tensor([0.5, 0.3, 0.2], dtype=torch.float32)
+"""
+Unit tests for the iterative convolution
+scanner function factories found in pyrenew.convolve
+"""
 
-#     multipliers = torch.tensor(np.random.normal(0, 0.5, size=500), dtype=torch.float32)
+import torch
+import numpy as np
+from numpy.testing import assert_array_equal
+import pyrenew.convolve as pc
 
-#     def transform_a(x):
-#         return 4 * x + 0.025
 
-#     scanner_a = pc.new_convolve_scanner(to_scan_a, transform_a)
-#     double_scanner_a = pc.new_double_convolve_scanner(
-#         (torch.tensor([523, 2, -0.5233], dtype=torch.float32), to_scan_a),
-#         (lambda x: 1, transform_a)
-#     )
+def test_double_scanner_reduces_to_single():
+    """
+    Test that torch_double_convolve_scanner() yields a function
+    that is equivalent to a single scanner if the first
+    scan is chosen appropriately
+    """
+    inits = torch.tensor([0.352, 5.2, -3], dtype=torch.float32)
+    to_scan_a = torch.tensor([0.5, 0.3, 0.2], dtype=torch.float32)
 
-#     # Manually replicate scanning
-#     history = inits
-#     results_a = []
-#     for multiplier in multipliers:
-#         history, result = scanner_a(history, multiplier)
-#         results_a.append(result)
+    multipliers = torch.tensor(np.random.normal(0, 0.5, size=500), dtype=torch.float32)
 
-#     history = inits
-#     results_a_double = []
-#     multipliers_b = multipliers * 0.2352
-#     for m1, m2 in zip(multipliers_b, multipliers):
-#         history, (result, _) = double_scanner_a(history, (m1, m2))
-#         results_a_double.append(result)
+    def transform_a(x):
+        """
+        Transformation associated with array to_scan_a
 
-#     results_a = torch.tensor(results_a)
-#     results_a_double = torch.tensor(results_a_double)
+        Parameters:
+        -----------
+        x: float
+            Input value
 
-#     assert_array_equal(results_a_double.numpy(), np.ones_like(multipliers.numpy()))
-#     assert_array_equal(results_a.numpy(), results_a_double.numpy())
+        Returns:
+        --------
+        The result of 4 * x + 0.025, where x is the input value
+        """
+        return 4 * x + 0.025
 
-#     import pytest
+    scanner_a = pc.torch_convolve_scanner(to_scan_a, transform_a)
 
-# Assuming torch_convolve is already imported if not defined here again
+    double_scanner_a = pc.torch_double_convolve_scanner(
+        (torch.tensor([523, 2, -0.5233], dtype=torch.float32), to_scan_a),
+        (lambda x: torch.tensor(1.), transform_a)
+    )
+
+    _, result_a = pc.torch_scan(scanner_a, inits, multipliers)
+
+    _, result_a_double = pc.torch_scan(
+        double_scanner_a, inits, (multipliers * 0.2352, multipliers)
+    )
+
+    # Using numpy's assert_array_equal to check equivalence of results
+    assert_array_equal(result_a_double[1].numpy(), np.ones_like(multipliers))
+    assert_array_equal(result_a_double[0].numpy(), result_a.numpy())
+
 
 def test_full_mode():
     a = torch.tensor([1, 2, 3], dtype=torch.float32)

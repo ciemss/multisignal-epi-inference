@@ -9,19 +9,19 @@ from torch import Tensor
 from typing import Callable, Tuple
 import torch.nn.functional as F
 
-def new_convolve_scanner(
-    array_to_convolve: Tensor,
-    transform: Callable[[float], float]
-) -> Callable:
-    """
-    Factory function to create a "scanner" function in PyTorch.
-    """
-    def _new_scanner(history_subset: Tensor, multiplier: float) -> Tuple[Tensor, float]:
-        new_val = transform(multiplier * torch.dot(array_to_convolve, history_subset))
-        latest = torch.cat((history_subset[1:], new_val.unsqueeze(0)))
-        return latest, new_val.item()
+# def new_convolve_scanner(
+#     array_to_convolve: Tensor,
+#     transform: Callable[[float], float]
+# ) -> Callable:
+#     """
+#     Factory function to create a "scanner" function in PyTorch.
+#     """
+#     def _new_scanner(history_subset: Tensor, multiplier: float) -> Tuple[Tensor, float]:
+#         new_val = transform(multiplier * torch.dot(array_to_convolve, history_subset))
+#         latest = torch.cat((history_subset[1:], new_val.unsqueeze(0)))
+#         return latest, new_val.item()
 
-    return _new_scanner
+#     return _new_scanner
 
 def new_double_convolve_scanner(
     arrays_to_convolve: Tuple[Tensor, Tensor],
@@ -46,6 +46,127 @@ def new_double_convolve_scanner(
     return _new_scanner
 
 
+
+def torch_convolve_scanner(
+    array_to_convolve: torch.Tensor,
+    transform: Callable[[torch.Tensor], torch.Tensor]
+) -> Callable:
+    """
+    Creates a "scanner" function for use with torch to construct an array via
+    backward-looking iterative convolution.
+
+    Parameters:
+    ----------
+    array_to_convolve : torch.Tensor
+        A 1D tensor to convolve with subsets of the iteratively constructed history array.
+
+    transform : Callable
+        A transformation to apply to the result of the dot product and multiplication.
+
+    Returns:
+    -------
+    Callable
+        A scanner function that can be used for convolution.
+
+    Notes:
+    -----
+    Implements the convolution:
+        X(t) = f(m(t) * (X[t-n:t] * d))
+    where 'd' is array_to_convolve and 'f' is transform.
+    """
+    def _scanner(history_subset: torch.Tensor, multiplier: float) -> Tuple[torch.Tensor, float]:
+        new_val = transform(multiplier * torch.dot(array_to_convolve, history_subset))
+        latest = torch.cat((history_subset[1:], new_val.unsqueeze(0)))
+        return latest, new_val
+
+    return _scanner
+
+def torch_double_convolve_scanner(
+    arrays_to_convolve: Tuple[torch.Tensor, torch.Tensor],
+    transforms: Tuple[Callable, Callable]
+) -> Callable:
+    """
+    Creates a scanner function that applies two sets of convolution operations in sequence.
+
+    Parameters:
+    ----------
+    arrays_to_convolve : Tuple[torch.Tensor, torch.Tensor]
+        Two tensors for convolution operations.
+
+    transforms : Tuple[Callable, Callable]
+        Two functions, each transforming the output of the convolution operations.
+
+    Returns:
+    -------
+    Callable
+        A scanner function for sequential convolutions.
+
+    Notes:
+    -----
+    Applies two convolution operations in sequence, each followed by a transformation.
+    """
+    arr1, arr2 = arrays_to_convolve
+    t1, t2 = transforms
+
+    def _scanner(history_subset: torch.Tensor, multipliers: Tuple[float, float]) -> Tuple[torch.Tensor, Tuple[float, float]]:
+        m1, m2 = multipliers
+        m_net1 = t1(m1 * torch.dot(arr1, history_subset))
+        new_val = t2(m2 * m_net1 * torch.dot(arr2, history_subset))
+        latest = torch.cat((history_subset[1:], new_val.unsqueeze(0)))
+        return latest, (new_val, m_net1)
+
+    return _scanner
+
+
+import torch
+
+def torch_scan(f, init, xs):
+    """
+    A version of scan for PyTorch that handles functions returning tuples of tensors.
+
+    Parameters:
+    -----------
+    f : Callable
+        Function to apply at each step, takes (current_state, current_inputs) and returns new_state, result(s).
+    init : Tensor or tuple
+        Initial state to start the scan from.
+    xs : Tensor or tuple of Tensors
+        Sequence or sequences of inputs to apply 'f' over.
+
+    Returns:
+    --------
+    final_state : Tensor or tuple
+        The final state after applying 'f' across all elements.
+    results : tuple of Tensors
+        Collected results from each step of applying 'f', each element in the tuple corresponds to one part of the tuple returned by 'f'.
+    """
+    current = init
+    num_steps = xs[0].shape[0] if isinstance(xs, tuple) else xs.shape[0]
+    results = []
+
+    for i in range(num_steps):
+        current_input = tuple(x[i] for x in xs) if isinstance(xs, tuple) else xs[i]
+        current, output = f(current, current_input)
+
+        if i == 0:
+            if isinstance(output, tuple):
+                results = [list() for _ in output]
+            else:
+                results = list()
+        
+        if isinstance(output, tuple):
+            for res_list, res in zip(results, output):
+                res_list.append(res)
+        else:
+            results.append(output)
+
+    # Convert lists in results to tensors
+    if isinstance(results[0], list):
+        results = tuple(torch.stack(res_list) for res_list in results)
+    else:
+        results = torch.stack(results)
+
+    return current, results
 
 # """ from __future__ import annotations
 
