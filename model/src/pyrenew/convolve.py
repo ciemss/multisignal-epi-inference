@@ -125,6 +125,8 @@ def torch_double_convolve_scanner(
 
         return latest, (new_val.squeeze().item(), m_net1)
 
+    return _scanner
+
 
 import torch
 
