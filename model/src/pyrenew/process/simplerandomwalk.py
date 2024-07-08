@@ -1,30 +1,21 @@
-# -*- coding: utf-8 -*-
-# numpydoc ignore=GL08
-
-import jax.numpy as jnp
-import numpyro as npro
-import numpyro.distributions as dist
+import torch
+import pyro
+import pyro.distributions as dist
 from pyrenew.metaclass import RandomVariable
-
 
 class SimpleRandomWalkProcess(RandomVariable):
     """
-    Class for a Markovian
-    random walk with an a
-    arbitrary step distribution
+    Class for a Markovian random walk with an arbitrary step distribution
     """
 
-    def __init__(
-        self,
-        error_distribution: dist.Distribution,
-    ) -> None:
+    def __init__(self, error_distribution: dist.Distribution):
         """
         Default constructor
 
         Parameters
         ----------
         error_distribution : dist.Distribution
-            Passed to numpyro.sample.
+            Distribution object used to generate steps in the random walk.
 
         Returns
         -------
@@ -32,42 +23,34 @@ class SimpleRandomWalkProcess(RandomVariable):
         """
         self.error_distribution = error_distribution
 
-    def sample(
-        self,
-        n_timepoints: int,
-        name: str = "randomwalk",
-        init: float = None,
-        **kwargs,
-    ) -> tuple:
+    def sample(self, n_timepoints: int, name: str = "randomwalk", init: float = None, **kwargs):
         """
-        Samples from the randomwalk
+        Samples from the random walk process.
 
         Parameters
         ----------
         n_timepoints : int
-            Length of the walk.
+            Length of the random walk to generate.
         name : str, optional
-            Passed to numpyro.sample, by default "randomwalk"
+            Base name for Pyro sample sites, default is "randomwalk".
         init : float, optional
-            Initial point of the walk, by default None
+            Initial value of the random walk, default is sampled from the error distribution.
         **kwargs : dict, optional
-            Additional keyword arguments passed through to internal sample()
-            calls, should there be any.
+            Additional keyword arguments passed through to internal Pyro sample calls.
 
         Returns
         -------
         tuple
-            With a single array of shape (n_timepoints,).
+            A single tensor representing the random walk, with shape (n_timepoints,).
         """
-
         if init is None:
-            init = npro.sample(name + "_init", self.error_distribution)
-        diffs = npro.sample(
+            init = pyro.sample(name + "_init", self.error_distribution)
+        diffs = pyro.sample(
             name + "_diffs",
-            self.error_distribution.expand((n_timepoints - 1,)),
+            self.error_distribution.expand([n_timepoints - 1]).to_event(1)
         )
 
-        return (init + jnp.cumsum(jnp.pad(diffs, [1, 0], constant_values=0)),)
+        return (torch.cat([torch.tensor([init]), init + torch.cumsum(diffs, dim=0)]),)
 
     @staticmethod
     def validate():
