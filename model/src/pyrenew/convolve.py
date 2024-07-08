@@ -108,14 +108,22 @@ def torch_double_convolve_scanner(
     arr1, arr2 = arrays_to_convolve
     t1, t2 = transforms
 
-    def _scanner(history_subset: torch.Tensor, multipliers: Tuple[float, float]) -> Tuple[torch.Tensor, Tuple[float, float]]:
+    def _scanner(history_subset: torch.Tensor, multipliers: Tuple[torch.Tensor, torch.Tensor]) -> Tuple[torch.Tensor, Tuple[float, float]]:
         m1, m2 = multipliers
+        # Assuming arr1 and arr2 are already defined and accessible in this context
         m_net1 = t1(m1 * torch.dot(arr1, history_subset))
         new_val = t2(m2 * m_net1 * torch.dot(arr2, history_subset))
-        latest = torch.cat((history_subset[1:], new_val.unsqueeze(0)))
-        return latest, (new_val, m_net1)
 
-    return _scanner
+        # Ensure new_val is a 1D tensor with a single element, equivalent to new_val.unsqueeze(0)
+        # If new_val is already 0-dimensional (scalar), unsqueeze twice to match the dimension
+        if new_val.dim() == 0:
+            new_val = new_val.unsqueeze(0)  # Make it 1D
+        new_val = new_val.unsqueeze(0)  # Make it 2D to match the cat requirement
+
+        # Concatenate along the appropriate dimension
+        latest = torch.cat((history_subset[1:], new_val), dim=0)  # Concatenate along the first dimension
+
+        return latest, (new_val.squeeze().item(), m_net1)
 
 
 import torch
