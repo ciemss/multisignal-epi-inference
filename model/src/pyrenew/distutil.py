@@ -13,7 +13,9 @@ from __future__ import annotations
 import torch
 import torch.nn.functional as F
 from torch import Tensor
-
+from torch.distributions import constraints
+from torch.distributions.transforms import SigmoidTransform, AffineTransform, ComposeTransform
+import pyro.distributions as dist
 
 def validate_discrete_dist_vector(
     discrete_dist: Tensor, tol: float = 1e-5
@@ -81,3 +83,5 @@ def reverse_discrete_dist_vector(dist: Tensor) -> Tensor:
         A reversed (torch.flip) discrete distribution vector
     """
     return torch.flip(dist, dims=[0])
+
+
