@@ -1,76 +1,88 @@
+from typing import NamedTuple
 import torch
 import pyro
 import pyro.distributions as dist
-from pyro.nn import PyroModule, PyroSample
-from typing import NamedTuple
-from pyrenew.convolve import torch_convolve
-
+from pyrenew.deterministic import DeterministicVariable
+from pyrenew.metaclass import RandomVariable
 
 class HospitalAdmissionsSample(NamedTuple):
+    """
+    A container to hold the output of `latent.HospAdmissions.sample()`.
+
+    Attributes:
+    ----------
+    infection_hosp_rate : float, optional
+        The infection-to-hospitalization rate. Defaults to None.
+    latent_hospital_admissions : torch.Tensor or None
+        The computed number of hospital admissions. Defaults to None.
+    """
+
     infection_hosp_rate: float | None = None
     latent_hospital_admissions: torch.Tensor | None = None
 
     def __repr__(self):
         return f"HospitalAdmissionsSample(infection_hosp_rate={self.infection_hosp_rate}, latent_hospital_admissions={self.latent_hospital_admissions})"
 
-class HospitalAdmissions(PyroModule):
-    def __init__(self, infection_to_admission_interval_rv, infect_hosp_rate_rv, latent_hospital_admissions_varname="latent_hospital_admissions", day_of_week_effect_rv=None, hosp_report_prob_rv=None):
-        super().__init__()
-        if day_of_week_effect_rv is None:
-            day_of_week_effect_rv = torch.tensor(1.0)  # Default value if not provided
-        if hosp_report_prob_rv is None:
-            hosp_report_prob_rv = torch.tensor(1.0)  # Assume full reporting if not provided
+class HospitalAdmissions(RandomVariable):
+    """
+    Latent hospital admissions model using a renewal process for estimating hospital admissions.
+    """
 
-        self.latent_hospital_admissions_varname = latent_hospital_admissions_varname
-        self.infect_hosp_rate_rv = PyroSample(dist.Delta(infect_hosp_rate_rv))
-        self.day_of_week_effect_rv = PyroSample(dist.Delta(day_of_week_effect_rv))
-        self.hosp_report_prob_rv = PyroSample(dist.Delta(hosp_report_prob_rv))
+    def __init__(
+        self,
+        infection_to_admission_interval_rv: RandomVariable,
+        infect_hosp_rate_rv: RandomVariable,
+        latent_hospital_admissions_varname: str = "latent_hospital_admissions",
+        day_of_week_effect_rv: RandomVariable | None = None,
+        hosp_report_prob_rv: RandomVariable | None = None,
+    ):
+        """
+        Initializes the Hospital Admissions model.
+        """
+
+        self.validate(infect_hosp_rate_rv, day_of_week_effect_rv, hosp_report_prob_rv)
+        
         self.infection_to_admission_interval_rv = infection_to_admission_interval_rv
+        self.infect_hosp_rate_rv = infect_hosp_rate_rv
+        self.latent_hospital_admissions_varname = latent_hospital_admissions_varname
+        self.day_of_week_effect_rv = day_of_week_effect_rv or DeterministicVariable(1, "weekday_effect")
+        self.hosp_report_prob_rv = hosp_report_prob_rv or DeterministicVariable(1, "hosp_report_prob")
 
-    def sample(self, latent_infections: Tensor, **kwargs) -> HospitalAdmissionsSample:
+    @staticmethod
+    def validate(infect_hosp_rate_rv, day_of_week_effect_rv, hosp_report_prob_rv):
         """
-        Samples from the observation process
-
-        Parameters
-        ----------
-        latent_infections : Tensor
-            Latent infections.
-        **kwargs : dict, optional
-            Additional keyword arguments passed through to internal `sample()`
-            calls, should there be any.
-
-        Returns
-        -------
-        HospitalAdmissionsSample
+        Validates that the provided random variables are of the appropriate type.
         """
-        infection_hosp_rate, *_ = self.infect_hosp_rate_rv.sample(**kwargs)
+        assert isinstance(infect_hosp_rate_rv, RandomVariable), "infect_hosp_rate_rv must be a RandomVariable"
+        if day_of_week_effect_rv is not None:
+            assert isinstance(day_of_week_effect_rv, RandomVariable), "day_of_week_effect_rv must be a RandomVariable"
+        if hosp_report_prob_rv is not None:
+            assert isinstance(hosp_report_prob_rv, RandomVariable), "hosp_report_prob_rv must be a RandomVariable"
+
+    def sample(self, latent_infections: torch.Tensor, **kwargs) -> HospitalAdmissionsSample:
+        """
+        Samples the expected number of hospital admissions based on latent infections.
+        """
+
+        infection_hosp_rate = self.infect_hosp_rate_rv.sample()
         infection_hosp_rate_t = infection_hosp_rate * latent_infections
 
-        # Sample the infection to admission interval
-        infection_to_admission_interval, *_ = self.infection_to_admission_interval_rv.sample(**kwargs)
+        infection_to_admission_interval = self.infection_to_admission_interval_rv.sample()
 
-        # Using torch_convolve to compute the convolution
-        latent_hospital_admissions = torch_convolve(
-            infection_hosp_rate_t,
-            infection_to_admission_interval,
-            mode='full'
-        )
+        # Using torch's convolve function to compute the convolution
+        latent_hospital_admissions = torch.conv1d(
+            infection_hosp_rate_t.view(1, 1, -1),
+            infection_to_admission_interval.view(1, 1, -1),
+            padding='same'
+        ).squeeze()
 
-        # Slice the result to match the size of the original infections tensor
-        latent_hospital_admissions = latent_hospital_admissions[:len(infection_hosp_rate_t)]
+        # Adjustments based on day of the week and hospitalization probability
+        day_of_week_effect = self.day_of_week_effect_rv.sample()
+        hosp_report_prob = self.hosp_report_prob_rv.sample()
 
-        # Applying the day of the week effect
-        day_of_week_effect = self.day_of_week_effect_rv.sample(**kwargs)
-        latent_hospital_admissions *= day_of_week_effect
+        latent_hospital_admissions *= day_of_week_effect * hosp_report_prob
 
-        # Applying probability of hospitalization effect
-        hosp_report_prob = self.hosp_report_prob_rv.sample(**kwargs)
-        latent_hospital_admissions *= hosp_report_prob
-
-        # Registering the computed hospital admissions as a deterministic variable
+        # Registering the sample as a deterministic Pyro variable
         pyro.deterministic(self.latent_hospital_admissions_varname, latent_hospital_admissions)
 
         return HospitalAdmissionsSample(infection_hosp_rate, latent_hospital_admissions)
-
-    def __repr__(self):
-        return f"HospitalAdmissions({self.latent_hospital_admissions_varname})"
