@@ -6,7 +6,7 @@ simulate the `scan` operation found in JAX.
 """
 import torch
 from torch import Tensor
-from typing import Callable, Tuple
+from typing import Callable, Tuple, Union
 import torch.nn.functional as F
 
 # def new_convolve_scanner(
@@ -74,11 +74,59 @@ def torch_convolve_scanner(
         X(t) = f(m(t) * (X[t-n:t] * d))
     where 'd' is array_to_convolve and 'f' is transform.
     """
-    def _scanner(history_subset: torch.Tensor, multiplier: float) -> Tuple[torch.Tensor, float]:
-        new_val = transform(multiplier * torch.dot(array_to_convolve, history_subset))
-        latest = torch.cat((history_subset[1:], new_val.unsqueeze(0)))
-        return latest, new_val
+    def _scanner(history_subset: torch.Tensor, multipliers: Union[Tuple[torch.Tensor, ...], torch.Tensor]) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Performs a single scan operation by applying a transformation to the dot product of a given array with a history subset,
+        followed by concatenating the result to update the history for the next step.
 
+        This scanner function is designed to handle inputs either as a tuple of multipliers or a single tensor multiplier. This flexibility
+        allows the function to be used in scenarios where different transformations might be applied based on the input structure.
+
+        Parameters:
+        ----------
+        history_subset : torch.Tensor
+            A tensor representing the current state of the history that is being updated iteratively. This subset is typically
+            the slice of a larger array that represents past values that influence the next value.
+
+        multipliers : Union[Tuple[torch.Tensor, ...], torch.Tensor]
+            The multipliers to apply to the dot product of the `array_to_convolve` with `history_subset`. If a tuple is provided,
+            it assumes a structure where each element of the tuple influences the computation distinctly, allowing for complex
+            behaviors like feedback mechanisms or multi-stage transformations.
+
+        Returns:
+        -------
+        Tuple[torch.Tensor, torch.Tensor]
+            A tuple containing:
+            - The updated history subset tensor after adding the new computed value.
+            - The new value tensor after applying the dot product and transformation, used for further computations or as part of an output sequence.
+
+        Raises:
+        ------
+        RuntimeError:
+            If there is a dimension mismatch in tensor operations, indicating that the expected input shapes are not aligned.
+
+        Examples:
+        --------
+        Assuming a setup with `array_to_convolve` and a transformation function `transform` defined:
+
+        >>> history = torch.tensor([1.0, 2.0, 3.0])
+        >>> multiplier = torch.tensor(0.5)
+        >>> updated_history, new_value = _scanner(history, multiplier)
+        """
+        if isinstance(multipliers, tuple):
+            # Unpack tuple if multipliers are given as a tuple
+            m1, *_ = multipliers
+            multiplier_effect = m1 * torch.dot(array_to_convolve, history_subset)
+        else:
+            # Use the multiplier directly if it's a single tensor
+            multiplier_effect = multipliers * torch.dot(array_to_convolve, history_subset)
+
+        new_val = transform(multiplier_effect)
+        if new_val.dim() == 0:
+            new_val = new_val.unsqueeze(0)
+
+        latest = torch.cat((history_subset[1:], new_val), dim=0)
+        return latest, new_val
     return _scanner
 
 def torch_double_convolve_scanner(
@@ -113,22 +161,17 @@ def torch_double_convolve_scanner(
         # Assuming arr1 and arr2 are already defined and accessible in this context
         m_net1 = t1(m1 * torch.dot(arr1, history_subset))
         new_val = t2(m2 * m_net1 * torch.dot(arr2, history_subset))
-
-        # Ensure new_val is a 1D tensor with a single element, equivalent to new_val.unsqueeze(0)
-        # If new_val is already 0-dimensional (scalar), unsqueeze twice to match the dimension
+        
+        # If new_val is a scalar, convert it to a 1D tensor by adding a new axis
         if new_val.dim() == 0:
-            new_val = new_val.unsqueeze(0)  # Make it 1D
-        new_val = new_val.unsqueeze(0)  # Make it 2D to match the cat requirement
-
-        # Concatenate along the appropriate dimension
+            new_val = new_val.unsqueeze(0)
+        # Now both history_subset[1:] and new_val are 1D
         latest = torch.cat((history_subset[1:], new_val), dim=0)  # Concatenate along the first dimension
-
-        return latest, (new_val.squeeze().item(), m_net1)
+        return latest, (new_val.item(), m_net1)
 
     return _scanner
 
 
-import torch
 
 def torch_scan(f, init, xs):
     """
@@ -151,32 +194,14 @@ def torch_scan(f, init, xs):
         Collected results from each step of applying 'f', each element in the tuple corresponds to one part of the tuple returned by 'f'.
     """
     current = init
-    num_steps = xs[0].shape[0] if isinstance(xs, tuple) else xs.shape[0]
-    results = []
-
-    for i in range(num_steps):
-        current_input = tuple(x[i] for x in xs) if isinstance(xs, tuple) else xs[i]
-        current, output = f(current, current_input)
-
-        if i == 0:
-            if isinstance(output, tuple):
-                results = [list() for _ in output]
-            else:
-                results = list()
-        
-        if isinstance(output, tuple):
-            for res_list, res in zip(results, output):
-                res_list.append(res)
+    outputs = []
+    for x in xs:
+        if isinstance(x, (list, tuple)):
+            current, out = f(current, x)
         else:
-            results.append(output)
-
-    # Convert lists in results to tensors
-    if isinstance(results[0], list):
-        results = tuple(torch.stack(res_list) for res_list in results)
-    else:
-        results = torch.stack(results)
-
-    return current, results
+            current, out = f(current, (x,))  # Ensure it's passed as a tuple
+        outputs.append(out)
+    return torch.stack(outputs), current
 
 # """ from __future__ import annotations
 
