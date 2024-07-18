@@ -157,11 +157,18 @@ def torch_double_convolve_scanner(
     t1, t2 = transforms
 
     def _scanner(history_subset: torch.Tensor, multipliers: Tuple[torch.Tensor, torch.Tensor]) -> Tuple[torch.Tensor, Tuple[float, float]]:
-        m1, m2 = multipliers
+        # Check if multipliers have the correct length and fill with default values if not
+        if len(multipliers) != 2:
+            # Assuming default value for m2 if not provided
+            m1 = multipliers[0] if len(multipliers) > 0 else torch.tensor(0.0)
+            m2 = torch.tensor(1.0)  # Default value for m2
+        else:
+            m1, m2 = multipliers
+
         # Assuming arr1 and arr2 are already defined and accessible in this context
         m_net1 = t1(m1 * torch.dot(arr1, history_subset))
         new_val = t2(m2 * m_net1 * torch.dot(arr2, history_subset))
-        
+
         # If new_val is a scalar, convert it to a 1D tensor by adding a new axis
         if new_val.dim() == 0:
             new_val = new_val.unsqueeze(0)
