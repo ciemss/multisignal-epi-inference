@@ -253,14 +253,14 @@ class DistributionalRV(RandomVariable):
         return None
 
     @staticmethod
-    def validate(dist: any) -> None:
+    def validate(distribution: any) -> None:
         """
         Validation of the distribution to be implemented in subclasses.
         """
-        if not isinstance(dist, dist.Distribution):
+        if not isinstance(distribution, dist.Distribution):
             raise ValueError(
-                "dist should be an instance of "
-                f"pyro.distributions.Distribution, got {dist}"
+                "distribution should be an instance of "
+                f"pyro.distributions.Distribution, got {distribution}"
             )
 
         return None

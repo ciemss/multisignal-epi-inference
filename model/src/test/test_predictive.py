@@ -4,8 +4,8 @@
 Ensures that posterior predictive samples are not generated when no posterior samples are available.
 """
 
-import jax.numpy as jnp
-import numpyro.distributions as dist
+import torch
+import pyro.distributions as dist
 import pyrenew.transformation as t
 import pytest
 from pyrenew.deterministic import DeterministicPMF
@@ -19,18 +19,18 @@ from pyrenew.model import RtInfectionsRenewalModel
 from pyrenew.observation import PoissonObservation
 from pyrenew.process import RtRandomWalkProcess
 
-pmf_array = jnp.array([0.25, 0.25, 0.25, 0.25])
+pmf_array = torch.tensor([0.25, 0.25, 0.25, 0.25])
 gen_int = DeterministicPMF(pmf_array, name="gen_int")
 I0 = InfectionSeedingProcess(
     "I0_seeding",
     DistributionalRV(dist=dist.LogNormal(0, 1), name="I0"),
-    SeedInfectionsZeroPad(n_timepoints=gen_int.size()),
+    SeedInfectionsZeroPad(n_timepoints=gen_int.size()()[0]),
     t_unit=1,
 )
 latent_infections = Infections()
 observed_infections = PoissonObservation()
 rt = RtRandomWalkProcess(
-    Rt0_dist=dist.TruncatedNormal(loc=1.2, scale=0.2, low=0),
+    Rt0_dist=dist.HalfNormal(scale=0.2),  # Using HalfNormal as a substitute
     Rt_transform=t.ExpTransform().inv,
     Rt_rw_dist=dist.Normal(0, 0.025),
 )
