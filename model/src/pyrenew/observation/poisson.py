@@ -25,7 +25,7 @@ class PoissonObservation(RandomVariable):
         self.parameter_name = parameter_name
         self.eps = eps
 
-    def sample(self, mu: Tensor, obs: Tensor = None, name: str = None, **kwargs) -> Tensor:
+    def sample(self, mu: Tensor, obs: Tensor = None, name: str = None, **kwargs) -> tuple:
         """
         Sample from the Poisson distribution using Pyro's primitives.
 
@@ -49,7 +49,7 @@ class PoissonObservation(RandomVariable):
         rate = mu + self.eps
 
         # Sampling from the Poisson distribution
-        return pyro.sample(name, dist.Poisson(rate), obs=obs)
+        return (pyro.sample(name, dist.Poisson(rate), obs=obs),)
 
     @staticmethod
     def validate():
