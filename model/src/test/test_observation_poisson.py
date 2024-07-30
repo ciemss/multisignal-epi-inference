@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # numpydoc ignore=GL08
 
-import jax.numpy as jnp
+import torch
 import numpy as np
 import numpy.testing as testing
 import numpyro as npro
@@ -16,8 +16,8 @@ def test_poisson_obs():
     pois = PoissonObservation("rv")
 
     np.random.seed(223)
-    rates = np.random.randint(1, 5, size=10)
+    rates = torch.tensor(np.random.randint(1, 5, size=10))
     with npro.handlers.seed(rng_seed=np.random.randint(1, 600)):
         sim_pois, *_ = pois.sample(mu=rates)
 
-    testing.assert_array_equal(sim_pois, jnp.ceil(sim_pois))
+    testing.assert_array_equal(sim_pois, torch.ceil(sim_pois))
