@@ -56,7 +56,7 @@ def ScaledLogitTransform(x_max: float) -> pt.ComposeTransform:
         - pyro.distributions.transforms.SigmoidTransform().inv
     """
     return pt.ComposeTransform(
-        [pt.AffineTransform(0.0, 1.0 / x_max), pt.SigmoidTransform().inv()]
+        [pt.AffineTransform(0.0, 1.0 / x_max), pt.SigmoidTransform().inv]
     )
 
 import torch
