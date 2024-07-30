@@ -4,9 +4,10 @@
 Tests for transformations
 """
 
-import jax.numpy as jnp
+import torch
+# import jax.numpy as jnp
 import pyrenew.transformation as t
-from numpy.testing import assert_array_almost_equal
+# from numpy.testing import assert_array_almost_equal
 
 
 def generic_inversion_test(
@@ -38,10 +39,11 @@ def generic_inversion_test(
     """
     instantiated = transform(**kwargs)
 
-    assert_array_almost_equal(
+    torch.allclose(
         test_vals,
         instantiated.inv(instantiated(test_vals)),
-        decimal=decimal,
+        atol=decimal,
+        rtol=0
     )
 
     return None
@@ -54,7 +56,7 @@ def test_invert_dists() -> None:
     """
     generic_inversion_test(
         t.ScaledLogitTransform,
-        50 * jnp.array([0.99235, 0.13242, 0.5, 0.235, 0.862]),
+        50 * torch.tensor([0.99235, 0.13242, 0.5, 0.235, 0.862]),
         x_max=50,
     )
 
