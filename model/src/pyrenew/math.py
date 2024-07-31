@@ -36,7 +36,11 @@ def get_asymptotic_growth_rate_and_age_dist(R, generation_interval_pmf):
     d_vec_real = torch.real(d_vec)
     d_val_real = torch.real(d_val)
     if torch.any(d_val.imag != 0):
-        raise ValueError("Complex parts detected in outputs.")
+        raise ValueError("get_asymptotic_growth_rate_and_age_dist() "
+            "produced an asymptotic growth rate with "
+            "non-zero imaginary part. "
+            "Check your generation interval distribution "
+            "vector and R value")
     d_vec_norm = d_vec_real / torch.sum(d_vec_real)
     return d_val_real.item(), d_vec_norm
 
