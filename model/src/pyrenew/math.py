@@ -35,7 +35,7 @@ def get_asymptotic_growth_rate_and_age_dist(R, generation_interval_pmf):
     d_vec, d_val = eigenvecs[:, d], eigenvals[d]
     d_vec_real = torch.real(d_vec)
     d_val_real = torch.real(d_val)
-    if torch.any(d_vec_real.imag != 0) or torch.any(d_val_real.imag != 0):
+    if torch.any(d_val.imag != 0):
         raise ValueError("Complex parts detected in outputs.")
     d_vec_norm = d_vec_real / torch.sum(d_vec_real)
     return d_val_real.item(), d_vec_norm

@@ -1,5 +1,5 @@
 import torch
-import pyrenew.math as pmath  # Ensure this module is adapted to use PyTorch
+import pyrenew.math as pmath
 
 def test_get_leslie():
     """
