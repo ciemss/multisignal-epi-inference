@@ -1,11 +1,8 @@
 # numpydoc ignore=GL08
 
 import torch
-# import jax.numpy as jnp
 import pyro
 import pyro.distributions as dist
-# import numpyro
-# import numpyro.distributions as dist
 from numpy.testing import assert_almost_equal
 from pyrenew.process import SimpleRandomWalkProcess
 
