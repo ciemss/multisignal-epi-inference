@@ -116,6 +116,9 @@ class SeedInfectionsExponential(InfectionSeedMethod):
         """
         if I_pre_seed.numel() != 1:
             raise ValueError(f"I_pre_seed must be a tensor of size 1. Got size {I_pre_seed.numel()}.")
+        (rate,) = self.rate.sample()
+        if rate.size(0) != 1:
+            raise ValueError(f"rate must be an array of size 1. Got size {rate.size}.")
         t = torch.arange(self.n_timepoints) - self.t_pre_seed
-        return I_pre_seed * torch.exp(self.rate * t)
+        return I_pre_seed * torch.exp(rate * t)
     
